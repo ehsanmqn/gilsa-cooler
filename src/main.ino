@@ -10,146 +10,126 @@
 // Set web server and wifi client
 WiFiServer server(80);
 WiFiClient wifiClient;
+WiFiManager wifiManager;
 PubSubClient client(wifiClient);
 
 // Definition of public variables
 int longPressCounter = 0;
 int lightFlashCounter = 0;
 int whiteFlashStatus = 0;
-int reconnectCounter = CHECK_CONNETCTION_ITERATIONS / 2;
+int reconnectCounter = CHECK_CONNETCTION_ITERATIONS;
 int rolloutCounter = 0;
-int leftButtonState, midButtonState, rightButtonState;
-bool isMidPressed = false;
-bool isRightPressed = false;
-bool isLeftPressed = false;
+int waterButtonState, lowSpeedState, highSpeedState;
+bool isLowSpeedPressed = false;
+bool isHighPressed = false;
+bool isWaterPresed = false;
 bool isConnected = false;
 
 void setup() {
+  // Setup pins
+  pinMode(lowSpeedRelay, OUTPUT);
+  pinMode(waterButtonRelay, OUTPUT);
+  pinMode(highSpeedRelay, OUTPUT);
+  pinMode(linkLed, OUTPUT);
+
+  pinMode(waterButtonSensor, INPUT);
+  pinMode(lowSpeedSensor, INPUT);
+  pinMode(highSpeedSensor, INPUT);
+
+  delay(10);
+
+  digitalWrite(linkLed, HIGH);
+  digitalWrite(lowSpeedRelay, LOW);
+  digitalWrite(waterButtonRelay, LOW);
+  digitalWrite(highSpeedRelay, LOW);
+
   // Setup serial
   if (serialEnabled)
   {
     Serial.begin(serialBuadrate);
   }
 
-  pinMode(midSwitchRelay, OUTPUT);
-  pinMode(leftSwitchRelay, OUTPUT);
-  pinMode(rightSwitchRelay, OUTPUT);
-  pinMode(linkLed, OUTPUT);
-
-  pinMode(rightSwitchInput, INPUT);
-  pinMode(midSwitchInput, INPUT);
-  pinMode(leftSwitchInput, INPUT);
-
-  delay(10);
-
-  digitalWrite(linkLed, HIGH);
-  digitalWrite(midSwitchRelay, LOW);
-  digitalWrite(leftSwitchRelay, LOW);
-  digitalWrite(rightSwitchRelay, LOW);
-
   Serial.println("[ INFO ] Init WiFi");
 
-  // Local intialization. Once its business is done, there is no need to keep it around
-  WiFiManager wifiManager;
-
-  // Uncomment and run it once, if you want to erase all the stored information
+  // If you want to erase all the stored information
   if (resetWifiEnabled) {
       wifiManager.resetSettings();
   }
 
-  // set custom ip for portal
-  if (customIpEnabled) {
-      wifiManager.setAPConfig(IPAddress(10,0,1,1), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
-  }
+  // Add token field to the portal
+  WiFiManagerParameter device_token_field("token", "Device credential", TOKEN, 20);
 
-  // fetches ssid and pass from eeprom and tries to connect if it does not connect it starts an
-  // access point with the specified name and goes into a blocking loop awaiting configuration
-  if (callbackEnabled) {
-    wifiManager.setAPCallback(configModeCallback);
-  }
+  wifiManager.addParameter(&device_token_field);
+  wifiManager.setConfigPortalTimeout(configPortalTimeout);
+  wifiManager.setDebugOutput(false);
+  // wifiManager.setSaveParamsCallback(saveParamsCallback);
 
+  //automatically connect using saved credentials if they exist
+  //If connection fails it starts an access point with the specified name
   if (autoGenerateSSID) {
     // Use this for auto generated name ESP + ChipID
     wifiManager.autoConnect();
   } else {
-    wifiManager.autoConnect(wifiSSID);
+    wifiManager.autoConnect(DEVICE_NAME);
   }
-
-  // Configuration portal timeout
-  wifiManager.setConfigPortalTimeout(portalTimeout);
 
   // if you get here you have connected to the WiFi
   Serial.println("[ INFO ] Connected to WiFi: ");
 
+  // Read token from EEPROM
+  // if(!statictoken) {
+  //     EEPROM.get(0, TOKEN);
+  // }
+
+  // Connect to the server
   server.begin();
   client.setServer(dmiotServer, mqttPort);
   client.setCallback(on_message);
 }
 
 void configModeCallback (WiFiManager *myWiFiManager) {
-  Serial.println("Entered config mode");
+  Serial.println("[ INFO ] Entered config mode");
   Serial.println(WiFi.softAPIP());
 
   Serial.println(myWiFiManager->getConfigPortalSSID());
 }
 
+void saveParamsCallback () {
+  // Save token into EEPROM
+  // if(!statictoken){
+  //   strcpy(TOKEN, device_token_field.getValue());
+  //   EEPROM.put(0, TOKEN);
+  //   EEPROM.commit();
+  // }
+}
+
+void startConfigPortal() {
+  digitalWrite(waterButtonRelay, HIGH);
+  digitalWrite(highSpeedRelay, LOW);
+  digitalWrite(lowSpeedRelay, LOW);
+  delay(3000);
+  wifiManager.erase();
+  ESP.restart();
+}
+
 void loop() {
   // ============================ Left button =================================
-  // leftButtonState = digitalRead(leftSwitchInput);
-  //
-  // if (leftButtonState == HIGH)
-  //   isLeftPressed = false;
-  //
-  // if (leftButtonState == LOW && !isLeftPressed) {
-  //   isLeftPressed = true;
-  //   if (gpioState[1] == false)
-  //   {
-  //     digitalWrite(leftSwitchRelay, HIGH);
-  //
-  //     // Update GPIOs state
-  //     gpioState[1] = true;
-  //   }
-  //   else {
-  //     digitalWrite(leftSwitchRelay, LOW);
-  //
-  //     // Update GPIOs state
-  //     gpioState[1] = false;
-  //   }
-  //   client.publish("v1/devices/me/attributes", get_gpio_status().c_str());
-  // }
+  waterButtonState = digitalRead(waterButtonSensor);
 
-  // ============================ Middle button =================================
-  midButtonState = digitalRead(midSwitchInput);
+  if (waterButtonState == HIGH)
+    isWaterPresed = false;
 
-  if (midButtonState == HIGH)
-    isMidPressed = false;
-  else {
-    // This part of code is for detecting long press
-    if ( midButtonState == LOW ) {
-      longPressCounter++;
-    }
-    else {
-      longPressCounter = 0;
-    }
-
-    if (longPressCounter == LONG_PRESS_ITERATIONS) {
-      Serial.println("[ INFO ] Long press detected");
-      reconnect();
-      longPressCounter = 0;
-    }
-  }
-
-  if (midButtonState == LOW && !isMidPressed) {
-    isMidPressed = true;
+  if (waterButtonState == LOW && !isWaterPresed) {
+    isWaterPresed = true;
     if (gpioState[0] == false)
     {
-      digitalWrite(midSwitchRelay, HIGH);
+      digitalWrite(waterButtonRelay, HIGH);
 
       // Update GPIOs state
       gpioState[0] = true;
     }
     else {
-      digitalWrite(midSwitchRelay, LOW);
+      digitalWrite(waterButtonRelay, LOW);
 
       // Update GPIOs state
       gpioState[0] = false;
@@ -157,47 +137,76 @@ void loop() {
     client.publish("v1/devices/me/attributes", get_gpio_status().c_str());
   }
 
-  // ============================ Right button =================================
-  // rightButtonState = digitalRead(rightSwitchInput);
-  //
-  // if (rightButtonState == HIGH)
-  //   isRightPressed = false;
-  //
-  // if (rightButtonState == LOW && !isRightPressed) {
-  //   isRightPressed = true;
-  //   if (gpioState[2] == false)
-  //   {
-  //     digitalWrite(rightSwitchRelay, HIGH);
-  //
-  //     // Update GPIOs state
-  //     gpioState[2] = true;
-  //   }
-  //   else {
-  //     digitalWrite(rightSwitchRelay, LOW);
-  //
-  //     // Update GPIOs state
-  //     gpioState[2] = false;
-  //   }
-  //   client.publish("v1/devices/me/attributes", get_gpio_status().c_str());
-  // }
+  // ============================ Middle button =================================
+  lowSpeedState = digitalRead(lowSpeedSensor);
 
-  // // ============================ Blink LED =================================
-  // if (lightFlashCounter >= CONNECTION_BLINK_ITERATIONS && !isConnected) {
-  //   if (whiteFlashStatus == 0 )
-  //   {
-  //     // Turn the light flash on
-  //     digitalWrite(linkLed, LOW);
-  //     whiteFlashStatus = 1;
-  //   }
-  //   else
-  //   {
-  //     // Turn the light flash off
-  //     digitalWrite(linkLed, HIGH);
-  //     whiteFlashStatus = 0;
-  //   }
-  //
-  //   lightFlashCounter = 0;
-  // }
+  if (lowSpeedState == HIGH)
+    isLowSpeedPressed = false;
+  else {
+    // This part of code is for detecting long press
+    if ( lowSpeedState == LOW ) {
+      longPressCounter++;
+    }
+    else {
+      longPressCounter = 0;
+    }
+
+    if (longPressCounter == LONG_PRESS_ITERATIONS) {
+      Serial.println("[ INFO ] Long press detected, starting Config Portal");
+
+      startConfigPortal();
+
+      longPressCounter = 0;
+    }
+  }
+
+  if (lowSpeedState == LOW && !isLowSpeedPressed) {
+    isLowSpeedPressed = true;
+    if (gpioState[1] == false)
+    {
+      digitalWrite(highSpeedRelay, LOW);
+      delay(10);
+      digitalWrite(lowSpeedRelay, HIGH);
+
+      // Update GPIOs state
+      gpioState[1] = true;
+      gpioState[2] = false;
+    }
+    else {
+      digitalWrite(lowSpeedRelay, LOW);
+
+      // Update GPIOs state
+      gpioState[1] = false;
+    }
+    client.publish("v1/devices/me/attributes", get_gpio_status().c_str());
+  }
+
+  // ============================ Right button =================================
+  highSpeedState = digitalRead(highSpeedSensor);
+
+  if (highSpeedState == HIGH)
+    isHighPressed = false;
+
+  if (highSpeedState == LOW && !isHighPressed) {
+    isHighPressed = true;
+    if (gpioState[2] == false)
+    {
+      digitalWrite(lowSpeedRelay, LOW);
+      delay(10);
+      digitalWrite(highSpeedRelay, HIGH);
+
+      // Update GPIOs state
+      gpioState[1] = false;
+      gpioState[2] = true;
+    }
+    else {
+      digitalWrite(highSpeedRelay, LOW);
+
+      // Update GPIOs state
+      gpioState[2] = false;
+    }
+    client.publish("v1/devices/me/attributes", get_gpio_status().c_str());
+  }
 
   // Check for connection
   if (reconnectCounter >= CHECK_CONNETCTION_ITERATIONS) {
@@ -212,7 +221,7 @@ void loop() {
   client.loop();
   reconnectCounter++;
 
-  delay(50);
+  delay(1);
 }
 
 // The callback for when a PUBLISH message is received from the server.
@@ -268,8 +277,8 @@ String get_gpio_status() {
   JsonObject& data = jsonBuffer.createObject();
 
   data[String(1)] = gpioState[0] ? true : false;
-  // data[String(2)] = gpioState[1] ? true : false;
-  // data[String(3)] = gpioState[2] ? true : false;
+  data[String(2)] = gpioState[1] ? true : false;
+  data[String(3)] = gpioState[2] ? true : false;
 
   char payload[256];
   data.printTo(payload, sizeof(payload));
@@ -284,44 +293,56 @@ void set_gpio_status(int pole, boolean enabled) {
   if (pole == 1) {
     if (enabled)
     {
-      digitalWrite(midSwitchRelay, HIGH);
+      digitalWrite(waterButtonRelay, HIGH);
     }
     else
     {
-      digitalWrite(midSwitchRelay, LOW);
+      digitalWrite(waterButtonRelay, LOW);
     }
 
     // Update GPIOs state
     gpioState[0] = enabled;
   }
 
-  // if (pole == 2) {
-  //   if (enabled)
-  //   {
-  //     digitalWrite(midSwitchRelay, HIGH);
-  //   }
-  //   else
-  //   {
-  //     digitalWrite(midSwitchRelay, LOW);
-  //   }
-  //
-  //   // Update GPIOs state
-  //   gpioState[1] = enabled;
-  // }
-  //
-  // if (pole == 3) {
-  //   if (enabled)
-  //   {
-  //     digitalWrite(rightSwitchRelay, HIGH);
-  //   }
-  //   else
-  //   {
-  //     digitalWrite(rightSwitchRelay, LOW);
-  //   }
-  //
-  //   // Update GPIOs state
-  //   gpioState[2] = enabled;
-  // }
+  if (pole == 2) {
+    if (enabled)
+    {
+      digitalWrite(highSpeedRelay, LOW);
+      delay(10);
+      digitalWrite(lowSpeedRelay, HIGH);
+
+      // Update GPIOs state
+      gpioState[1] = enabled;
+      gpioState[2] = !enabled;
+    }
+    else
+    {
+      digitalWrite(lowSpeedRelay, LOW);
+
+      // Update GPIOs state
+      gpioState[1] = enabled;
+    }
+  }
+
+  if (pole == 3) {
+    if (enabled)
+    {
+      digitalWrite(lowSpeedRelay, LOW);
+      delay(10);
+      digitalWrite(highSpeedRelay, HIGH);
+
+      // Update GPIOs state
+      gpioState[1] = !enabled;
+      gpioState[2] = enabled;
+    }
+    else
+    {
+      digitalWrite(highSpeedRelay, LOW);
+
+      // Update GPIOs state
+      gpioState[2] = enabled;
+    }
+  }
 }
 
 // Reconnect to the server function
@@ -330,12 +351,11 @@ void reconnect() {
   Serial.println("[ INFO ] Connecting to DMIoT server ...");
 
   // Attempt to connect (clientId, username, password)
-  if ( client.connect("Sonoff T3", TOKEN, NULL) ) {
+  if ( client.connect(DEVICE_NAME, TOKEN, NULL) ) {
     Serial.println( "[ INFO ] Connected to the server" );
 
     digitalWrite(linkLed, LOW);
     isConnected = true;
-
 
     // Subscribing to receive RPC requests
     client.subscribe("v1/devices/me/rpc/request/+");

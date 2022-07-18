@@ -1,6 +1,9 @@
+#define EEPROM_SIZE 20
+#define DEVICE_NAME "Gilsa Cooler"
+#define statictoken true
 
-// Device token
-#define TOKEN "YfN0IJPU5Y6lMl7her2o"
+// #define TOKEN "1cNEgsWvCOiJQnTX7fMC" // 4
+char TOKEN[20] = {0};
 
 // GPIO bindings
 #define GPIO0 0
@@ -20,19 +23,20 @@
 #define GPIO16 16
 
 // Constants
-#define LONG_PRESS_ITERATIONS 600000
-#define CONNECTION_BLINK_ITERATIONS 100000
-#define CHECK_CONNETCTION_ITERATIONS 5000000
+#define LOOP_SLEEP_TIME 1
+#define LONG_PRESS_ITERATIONS 5000
+#define CONNECTION_BLINK_ITERATIONS 10000
+#define CHECK_CONNETCTION_ITERATIONS 60000
 
 // Input Constants
-#define leftSwitchInput GPIO0
-#define midSwitchInput GPIO3
-#define rightSwitchInput GPIO1
+#define waterButtonSensor GPIO0
+#define lowSpeedSensor GPIO3
+#define highSpeedSensor GPIO1
 
 // Output Constants
-#define leftSwitchRelay GPIO5
-#define midSwitchRelay GPIO14
-#define rightSwitchRelay GPIO12
+#define waterButtonRelay GPIO5
+#define lowSpeedRelay GPIO14
+#define highSpeedRelay GPIO12
 #define linkLed GPIO13
 
 // Serial configurations
@@ -41,12 +45,8 @@
 
 // Wifi configuration
 #define resetWifiEnabled false
-#define customIpEnabled false
-#define callbackEnabled false
 #define autoGenerateSSID false
-#define portalTimeout 60
-
-char wifiSSID[20] = "DM Wall T1";
+#define configPortalTimeout 60
 
 // Server Configuration
 int mqttPort = 1883;
@@ -54,3 +54,10 @@ char dmiotServer[] = "platform.dmiot.ir";
 
 // We assume that all GPIOs are LOW
 bool gpioState[] = {false, false, false, false};
+
+// Device token
+// #ifdef statictoken
+// #define notoken 1
+// #else
+// char TOKEN[20] = {0};
+// #endif
